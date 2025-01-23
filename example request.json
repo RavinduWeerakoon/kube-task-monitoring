@@ -1,0 +1,272 @@
+{
+    "metadata": {
+        "name": "simplejob.181cf12d30698afe",
+        "namespace": "default",
+        "uid": "002547ac-f845-4711-9ed0-8fd50ca2f94f",
+        "resourceVersion": "58620",
+        "creationTimestamp": "2025-01-22T06:52:12Z"
+    },
+    "reason": "SuccessfulCreate",
+    "message": "Created pod: simplejob-2jb8c",
+    "source": {
+        "component": "job-controller"
+    },
+    "firstTimestamp": "2025-01-22T06:52:12Z",
+    "lastTimestamp": "2025-01-22T06:52:12Z",
+    "count": 1,
+    "type": "Normal",
+    "eventTime": null,
+    "reportingComponent": "job-controller",
+    "reportingInstance": "",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Job",
+        "namespace": "default",
+        "name": "simplejob",
+        "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+        "apiVersion": "batch/v1",
+        "resourceVersion": "58616",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"batch/v1\",\"kind\":\"Job\",\"metadata\":{\"annotations\":{},\"name\":\"simplejob\",\"namespace\":\"default\"},\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"image\":\"go_test:latest\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"simplejob\",\"resources\":{}}],\"restartPolicy\":\"OnFailure\"}}}}\n"
+        },
+        "deleted": false
+    }
+}
+{
+    "metadata": {
+        "name": "simplejob-2jb8c.181cf12d30f6f236",
+        "namespace": "default",
+        "uid": "145dd4d0-8224-4ca7-9a54-4d82e97e0827",
+        "resourceVersion": "58621",
+        "creationTimestamp": "2025-01-22T06:52:12Z"
+    },
+    "reason": "Scheduled",
+    "message": "Successfully assigned default/simplejob-2jb8c to lima-rancher-desktop",
+    "source": {},
+    "firstTimestamp": null,
+    "lastTimestamp": null,
+    "type": "Normal",
+    "eventTime": "2025-01-22T06:52:12.655479Z",
+    "action": "Binding",
+    "reportingComponent": "default-scheduler",
+    "reportingInstance": "default-scheduler-lima-rancher-desktop",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "simplejob-2jb8c",
+        "uid": "ffadde8f-be82-48f3-b26d-a006c7ab5ecb",
+        "apiVersion": "v1",
+        "resourceVersion": "58617",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "ownerReferences": [
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "simplejob",
+                "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+                "controller": true,
+                "blockOwnerDeletion": true
+            }
+        ],
+        "deleted": false
+    }
+}
+{
+    "metadata": {
+        "name": "simplejob-2jb8c.181cf12d4d767882",
+        "namespace": "default",
+        "uid": "3e5a7d05-362a-453d-92f3-bb0d8bbb342e",
+        "resourceVersion": "58623",
+        "creationTimestamp": "2025-01-22T06:52:13Z"
+    },
+    "reason": "Pulled",
+    "message": "Container image \"go_test:latest\" already present on machine",
+    "source": {
+        "component": "kubelet",
+        "host": "lima-rancher-desktop"
+    },
+    "firstTimestamp": "2025-01-22T06:52:13Z",
+    "lastTimestamp": "2025-01-22T06:52:13Z",
+    "count": 1,
+    "type": "Normal",
+    "eventTime": null,
+    "reportingComponent": "kubelet",
+    "reportingInstance": "lima-rancher-desktop",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "simplejob-2jb8c",
+        "uid": "ffadde8f-be82-48f3-b26d-a006c7ab5ecb",
+        "apiVersion": "v1",
+        "resourceVersion": "58618",
+        "fieldPath": "spec.containers{simplejob}",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "ownerReferences": [
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "simplejob",
+                "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+                "controller": true,
+                "blockOwnerDeletion": true
+            }
+        ],
+        "deleted": false
+    }
+}
+{
+    "metadata": {
+        "name": "simplejob-2jb8c.181cf12d4ea3af06",
+        "namespace": "default",
+        "uid": "d4ee6dee-7cca-45fd-aa2e-1824efc45d96",
+        "resourceVersion": "58624",
+        "creationTimestamp": "2025-01-22T06:52:13Z"
+    },
+    "reason": "Created",
+    "message": "Created container simplejob",
+    "source": {
+        "component": "kubelet",
+        "host": "lima-rancher-desktop"
+    },
+    "firstTimestamp": "2025-01-22T06:52:13Z",
+    "lastTimestamp": "2025-01-22T06:52:13Z",
+    "count": 1,
+    "type": "Normal",
+    "eventTime": null,
+    "reportingComponent": "kubelet",
+    "reportingInstance": "lima-rancher-desktop",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "simplejob-2jb8c",
+        "uid": "ffadde8f-be82-48f3-b26d-a006c7ab5ecb",
+        "apiVersion": "v1",
+        "resourceVersion": "58618",
+        "fieldPath": "spec.containers{simplejob}",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "ownerReferences": [
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "simplejob",
+                "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+                "controller": true,
+                "blockOwnerDeletion": true
+            }
+        ],
+        "deleted": false
+    }
+}
+{
+    "metadata": {
+        "name": "simplejob-2jb8c.181cf12d54ec6c19",
+        "namespace": "default",
+        "uid": "6186c1d0-4097-4ca1-b8b3-31578175a062",
+        "resourceVersion": "58625",
+        "creationTimestamp": "2025-01-22T06:52:13Z"
+    },
+    "reason": "Started",
+    "message": "Started container simplejob",
+    "source": {
+        "component": "kubelet",
+        "host": "lima-rancher-desktop"
+    },
+    "firstTimestamp": "2025-01-22T06:52:13Z",
+    "lastTimestamp": "2025-01-22T06:52:13Z",
+    "count": 1,
+    "type": "Normal",
+    "eventTime": null,
+    "reportingComponent": "kubelet",
+    "reportingInstance": "lima-rancher-desktop",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "simplejob-2jb8c",
+        "uid": "ffadde8f-be82-48f3-b26d-a006c7ab5ecb",
+        "apiVersion": "v1",
+        "resourceVersion": "58618",
+        "fieldPath": "spec.containers{simplejob}",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "ownerReferences": [
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "simplejob",
+                "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+                "controller": true,
+                "blockOwnerDeletion": true
+            }
+        ],
+        "deleted": false
+    }
+}
+{
+    "metadata": {
+        "name": "simplejob.181cf134d11bb3e9",
+        "namespace": "default",
+        "uid": "9c21f182-97bb-435c-a27c-bc226b7acaff",
+        "resourceVersion": "58645",
+        "creationTimestamp": "2025-01-22T06:52:45Z"
+    },
+    "reason": "Completed",
+    "message": "Job completed",
+    "source": {
+        "component": "job-controller"
+    },
+    "firstTimestamp": "2025-01-22T06:52:45Z",
+    "lastTimestamp": "2025-01-22T06:52:45Z",
+    "count": 1,
+    "type": "Normal",
+    "eventTime": null,
+    "reportingComponent": "job-controller",
+    "reportingInstance": "",
+    "clusterName": "",
+    "involvedObject": {
+        "kind": "Job",
+        "namespace": "default",
+        "name": "simplejob",
+        "uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+        "apiVersion": "batch/v1",
+        "resourceVersion": "58642",
+        "labels": {
+            "batch.kubernetes.io/controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "batch.kubernetes.io/job-name": "simplejob",
+            "controller-uid": "99e54a57-1547-4f48-8060-b54d80c87c98",
+            "job-name": "simplejob"
+        },
+        "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"batch/v1\",\"kind\":\"Job\",\"metadata\":{\"annotations\":{},\"name\":\"simplejob\",\"namespace\":\"default\"},\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"image\":\"go_test:latest\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"simplejob\",\"resources\":{}}],\"restartPolicy\":\"OnFailure\"}}}}\n"
+        },
+        "deleted": false
+    }
+}

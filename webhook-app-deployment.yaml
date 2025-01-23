@@ -1,0 +1,22 @@
+# webhook-app-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook-app
+  template:
+    metadata:
+      labels:
+        app: webhook-app
+    spec:
+      containers:
+        - name: webhook-app
+          image: webhook-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
