@@ -9,13 +9,30 @@ import (
 
 var jobStore *JobStore
 
+func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		handler(w, r)
+	}
+}
+
 func main() {
 	jobStore = NewJobStore()
 
 	// Routes
-	http.HandleFunc("/webhook", handleWebhook)
-	http.HandleFunc("/jobs/", handleJobs)
-	http.HandleFunc("/jobs", handleJobs)
+	http.HandleFunc("/webhook", enableCORS(handleWebhook))
+	http.HandleFunc("/jobs/", enableCORS(handleJobs))
+	http.HandleFunc("/jobs", enableCORS(handleJobs))
 
 	log.Printf("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

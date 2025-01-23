@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"sync"
-	"time"
 )
 
 type JobStore struct {
@@ -40,7 +39,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job, exists := s.jobs[jobID]
 			if exists {
 				job.Status = "Completed"
-				job.EndTime = time.Now()
+				job.EndTime = event.Metadata.CreationTimestamp
 				job.Duration = job.EndTime.Sub(job.StartTime).Seconds()
 			}
 		}
