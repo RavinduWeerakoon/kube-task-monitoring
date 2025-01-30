@@ -41,6 +41,14 @@ func main() {
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
+
+	// body, err := io.ReadAll(r.Body)
+	// if err != nil {
+	// 	http.Error(w, "Cannot read body", http.StatusBadRequest)
+	// 	return
+	// }
+	// fmt.Println(string(body))
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

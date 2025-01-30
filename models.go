@@ -10,15 +10,25 @@ type Activity struct {
 	Duration  float64   `json:"duration"`
 }
 
-type Job struct {
+type Attempt struct {
 	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Namespace  string     `json:"namespace"`
 	StartTime  time.Time  `json:"startTime"`
 	EndTime    time.Time  `json:"endTime"`
 	Duration   float64    `json:"duration"`
 	Status     string     `json:"status"`
 	Activities []Activity `json:"activities"`
+	AttemptID  string     `json:"attemptId"`
+}
+
+type Job struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Namespace  string    `json:"namespace"`
+	StartTime  time.Time `json:"startTime"`
+	EndTime    time.Time `json:"endTime"`
+	Duration   float64   `json:"duration"`
+	Status     string    `json:"status"`
+	Activities []Attempt `json:"activities"`
 }
 
 type K8sEvent struct {

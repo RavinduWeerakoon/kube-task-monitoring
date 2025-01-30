@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Build the application
-RUN go build -o webhook-app main.go
+RUN go build -o webhook-app .
 
 # Use a minimal base image
 FROM alpine:latest
