@@ -1,19 +1,31 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type JobStore struct {
-	jobs map[string]*Job
-	mu   sync.RWMutex
+	jobs        map[string]*Job
+	mu          sync.RWMutex
+	redisClient *redis.Client
 }
 
 func NewJobStore() *JobStore {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
 	return &JobStore{
-		jobs: make(map[string]*Job),
+		jobs:        make(map[string]*Job),
+		redisClient: rdb,
 	}
 }
 
@@ -51,7 +63,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			involvedObjectId := event.InvolvedObject.UID
 			podId := getPodId(event.Message)
 
-			job, exists := s.jobs[involvedObjectId]
+			job, exists := s.GetJob(involvedObjectId)
 
 			attempt := Attempt{
 				ID:         podId,
@@ -74,17 +86,19 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 				}
 
 				job.Activities = append(job.Activities, attempt)
-				s.jobs[involvedObjectId] = job
+				// s.jobs[involvedObjectId] = job
+				s.SaveJob(job)
 
 			} else {
 				changeLastActivity(*job, "Failed", event)
 				job.Activities = append(job.Activities, attempt)
+				s.SaveJob(job)
 
 			}
 
 		} else if event.Reason == "Completed" {
 			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.jobs[involvedObjectId]
+			job, exists := s.GetJob(involvedObjectId)
 			if !exists {
 				fmt.Println("Failed there's no job uid with that")
 
@@ -93,9 +107,10 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Success"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+			s.SaveJob(job)
 		} else if event.Reason == "BackoffLimitExceeded" {
 			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.jobs[involvedObjectId]
+			job, exists := s.GetJob(involvedObjectId)
 			if !exists {
 				fmt.Println("Failed there's no job uid with that")
 
@@ -105,25 +120,62 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Failed"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+			s.SaveJob(job)
 		}
 
 	}
 }
 
+// Replace in-memory storage with Redis
 func (s *JobStore) GetJob(id string) (*Job, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	job, exists := s.jobs[id]
-	return job, exists
+	ctx := context.Background()
+	val, err := s.redisClient.Get(ctx, "job:"+id).Result()
+	if err == redis.Nil {
+		return nil, false
+	} else if err != nil {
+		fmt.Printf("Error retrieving job: %v\n", err)
+		return nil, false
+	}
+
+	var job Job
+	if err := json.Unmarshal([]byte(val), &job); err != nil {
+		fmt.Printf("Error unmarshaling job: %v\n", err)
+		return nil, false
+	}
+	return &job, true
 }
 
 func (s *JobStore) GetAllJobs() []Job {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	ctx := context.Background()
+	keys, err := s.redisClient.Keys(ctx, "job:*").Result()
+	if err != nil {
+		fmt.Printf("Error retrieving job keys: %v\n", err)
+		return nil
+	}
 
-	jobs := make([]Job, 0, len(s.jobs))
-	for _, job := range s.jobs {
-		jobs = append(jobs, *job)
+	jobs := make([]Job, 0, len(keys))
+	for _, key := range keys {
+		val, err := s.redisClient.Get(ctx, key).Result()
+		if err == nil {
+			var job Job
+			if json.Unmarshal([]byte(val), &job) == nil {
+				jobs = append(jobs, job)
+			}
+		}
 	}
 	return jobs
+}
+
+func (s *JobStore) SaveJob(job *Job) error {
+	ctx := context.Background()
+	jobData, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("error marshaling the job to redis: %v", err)
+	}
+
+	err = s.redisClient.Set(ctx, "job:"+job.ID, jobData, 0).Err()
+	if err != nil {
+		return fmt.Errorf("error saving job to redis: %v", err)
+	}
+	return nil
 }
