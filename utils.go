@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -10,31 +9,43 @@ import (
 	"strings"
 	"sync"
 
-	opensearch "github.com/opensearch-project/opensearch-go"
-	opensearchapi "github.com/opensearch-project/opensearch-go/opensearchapi"
+	opensearch "github.com/opensearch-project/opensearch-go/v4"
+	opensearchapi "github.com/opensearch-project/opensearch-go/v4/opensearchapi"
 )
 
 type JobStore struct {
 	jobs             map[string]*Job
 	mu               sync.RWMutex
-	opensearchClient *opensearch.Client
+	opensearchClient *opensearchapi.Client
 }
 
 func NewJobStore() *JobStore {
 	// Initialize the client with SSL/TLS enabled.
-	client, err := opensearch.NewClient(opensearch.Config{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-		Addresses: []string{"https://localhost:9200"},
-		Username:  "admin", // For testing only. Don't store credentials in code.
-		Password:  "Hiran@0685N",
-	})
 
+	// Initialize the client with SSL/TLS enabled.
+	client, err := opensearchapi.NewClient(
+		opensearchapi.Config{
+			Client: opensearch.Config{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // For testing only. Use certificate for validation.
+				},
+				Addresses: []string{"https://localhost:9200"},
+				Username:  "admin", // For testing only. Don't store credentials in code.
+				Password:  "Hiran@0685N",
+			},
+		},
+	)
 	if err != nil {
 		panic(fmt.Sprintf("cannot initialize OpenSearch client: %v", err))
 	}
-
+	ctx := context.Background()
+	_, err = client.Indices.Exists(ctx, opensearchapi.IndicesExistsReq{Indices: []string{"jobs"}})
+	if err != nil {
+		_, err = client.Indices.Create(ctx, opensearchapi.IndicesCreateReq{Index: "jobs"})
+		if err != nil {
+			panic(fmt.Sprintf("cannot create index: %v", err))
+		}
+	}
 	return &JobStore{
 		jobs:             make(map[string]*Job),
 		opensearchClient: client,
@@ -143,34 +154,35 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 // Replace in-memory storage with OpenSearch
 func (s *JobStore) GetJob(id string) (*Job, bool) {
 	ctx := context.Background()
-	req := opensearchapi.GetRequest{
-		Index:      "jobs",
-		DocumentID: id,
-	}
-
-	res, err := req.Do(ctx, s.opensearchClient)
+	getResp, err := s.opensearchClient.Document.Get(
+		ctx,
+		opensearchapi.DocumentGetReq{
+			Index:      "jobs",
+			DocumentID: id,
+		},
+	)
 
 	if err != nil {
 		fmt.Printf("Error getting job: %v\n", err)
 		return nil, false
 	}
-	defer res.Body.Close()
 
-	// fmt.Println("res", res.StatusCode)
-	// fmt.Println("res", res)
-
-	if res.StatusCode == http.StatusNotFound {
-		return nil, false
-	}
-
-	var response struct {
+	var Response struct {
 		Source Job `json:"_source"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-		fmt.Printf("Error decoding job: %v\n", err)
+
+	respAsJson, err := json.MarshalIndent(getResp, "", "  ")
+
+	if err := json.Unmarshal(respAsJson, &Response); err != nil {
+		fmt.Printf("Error unmarshaling response: %v\n", err)
 		return nil, false
 	}
-	job := response.Source
+
+	if err != nil {
+		return nil, false
+	}
+
+	job := Response.Source
 
 	return &job, true
 
@@ -179,15 +191,17 @@ func (s *JobStore) GetJob(id string) (*Job, bool) {
 func (s *JobStore) GetAllJobs() []Job {
 	ctx := context.Background()
 	res, err := s.opensearchClient.Search(
-		s.opensearchClient.Search.WithContext(ctx),
-		s.opensearchClient.Search.WithIndex("jobs"),
-		s.opensearchClient.Search.WithSize(1000), // Adjust size as needed
+		ctx,
+		&opensearchapi.SearchReq{Indices: []string{"jobs"}},
 	)
 	if err != nil {
 		fmt.Printf("Error retrieving jobs: %v\n", err)
 		return nil
 	}
-	defer res.Body.Close()
+	respAsJson, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		fmt.Printf("Error Converting jobs: %v\n", err)
+	}
 
 	var searchResult struct {
 		Hits struct {
@@ -197,7 +211,7 @@ func (s *JobStore) GetAllJobs() []Job {
 		} `json:"hits"`
 	}
 
-	if err := json.NewDecoder(res.Body).Decode(&searchResult); err != nil {
+	if err := json.NewDecoder(strings.NewReader(string(respAsJson))).Decode(&searchResult); err != nil {
 		fmt.Printf("Error decoding search results: %v\n", err)
 		return nil
 	}
@@ -215,18 +229,19 @@ func (s *JobStore) SaveJob(job *Job) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling the job to OpenSearch: %v", err)
 	}
-	req := opensearchapi.IndexRequest{
-		Index:      "jobs",
-		DocumentID: job.ID,
-		Body:       strings.NewReader(string(jobData)),
-	}
-	insertResponse, err := req.Do(ctx, s.opensearchClient)
+	docCreateResp, err := s.opensearchClient.Document.Create(
+		ctx,
+		opensearchapi.DocumentCreateReq{
+			Index:      "jobs",
+			DocumentID: job.ID,
+			Body:       strings.NewReader(string(jobData)),
+		},
+	)
 	if err != nil {
 		fmt.Println("failed to insert document ", err)
 	}
 	fmt.Println("Inserting a document")
-	fmt.Println(insertResponse)
-	defer insertResponse.Body.Close()
+	fmt.Println("Document", docCreateResp.Result)
 
 	return nil
 }
@@ -236,20 +251,21 @@ func (s *JobStore) UpdateJob(job *Job) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling the job to OpenSearch: %v", err)
 	}
-	req, err := http.NewRequest("POST", fmt.Sprintf("/jobs/_update/%s", job.ID), bytes.NewReader(jobData))
-	if err != nil {
-		return fmt.Errorf("failed to create update request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+	ctx := context.Background()
 
-	resp, err := s.opensearchClient.Transport.Perform(req)
+	indexResp, err := s.opensearchClient.Index(
+		ctx,
+		opensearchapi.IndexReq{
+			Index:      "jobs",
+			DocumentID: job.ID,
+			Body:       strings.NewReader(string(jobData)),
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("failed to perform update request: %v", err)
+		fmt.Println("failed to update document ", err)
+		return nil
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to update document, status: %s", resp.Status)
-	}
+	fmt.Printf("Document: %s\n", indexResp.Result)
 	return nil
 }
