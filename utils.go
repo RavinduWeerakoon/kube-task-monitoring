@@ -1,32 +1,43 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 
-	"github.com/redis/go-redis/v9"
+	opensearch "github.com/opensearch-project/opensearch-go"
+	opensearchapi "github.com/opensearch-project/opensearch-go/opensearchapi"
 )
 
 type JobStore struct {
-	jobs        map[string]*Job
-	mu          sync.RWMutex
-	redisClient *redis.Client
+	jobs             map[string]*Job
+	mu               sync.RWMutex
+	opensearchClient *opensearch.Client
 }
 
 func NewJobStore() *JobStore {
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
-		// Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
+	// Initialize the client with SSL/TLS enabled.
+	client, err := opensearch.NewClient(opensearch.Config{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Addresses: []string{"https://localhost:9200"},
+		Username:  "admin", // For testing only. Don't store credentials in code.
+		Password:  "Hiran@0685N",
 	})
 
+	if err != nil {
+		panic(fmt.Sprintf("cannot initialize OpenSearch client: %v", err))
+	}
+
 	return &JobStore{
-		jobs:        make(map[string]*Job),
-		redisClient: rdb,
+		jobs:             make(map[string]*Job),
+		opensearchClient: client,
 	}
 }
 
@@ -62,6 +73,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 		if event.Reason == "SuccessfulCreate" {
 
 			involvedObjectId := event.InvolvedObject.UID
+			fmt.Println("involvedObjectId", involvedObjectId)
 			podId := getPodId(event.Message)
 
 			job, exists := s.GetJob(involvedObjectId)
@@ -91,9 +103,10 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 				s.SaveJob(job)
 
 			} else {
+				//another pod is created if the job has failed
 				changeLastActivity(*job, "Failed", event)
 				job.Activities = append(job.Activities, attempt)
-				s.SaveJob(job)
+				s.UpdateJob(job)
 
 			}
 
@@ -108,7 +121,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Success"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.SaveJob(job)
+			s.UpdateJob(job)
 		} else if event.Reason == "BackoffLimitExceeded" {
 			involvedObjectId := event.InvolvedObject.UID
 			job, exists := s.GetJob(involvedObjectId)
@@ -121,48 +134,77 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Failed"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.SaveJob(job)
+			s.UpdateJob(job)
 		}
 
 	}
 }
 
-// Replace in-memory storage with Redis
+// Replace in-memory storage with OpenSearch
 func (s *JobStore) GetJob(id string) (*Job, bool) {
 	ctx := context.Background()
-	val, err := s.redisClient.Get(ctx, "job:"+id).Result()
-	if err == redis.Nil {
+	req := opensearchapi.GetRequest{
+		Index:      "jobs",
+		DocumentID: id,
+	}
+
+	res, err := req.Do(ctx, s.opensearchClient)
+
+	if err != nil {
+		fmt.Printf("Error getting job: %v\n", err)
 		return nil, false
-	} else if err != nil {
-		fmt.Printf("Error retrieving job: %v\n", err)
+	}
+	defer res.Body.Close()
+
+	// fmt.Println("res", res.StatusCode)
+	// fmt.Println("res", res)
+
+	if res.StatusCode == http.StatusNotFound {
 		return nil, false
 	}
 
-	var job Job
-	if err := json.Unmarshal([]byte(val), &job); err != nil {
-		fmt.Printf("Error unmarshaling job: %v\n", err)
+	var response struct {
+		Source Job `json:"_source"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		fmt.Printf("Error decoding job: %v\n", err)
 		return nil, false
 	}
+	job := response.Source
+
 	return &job, true
+
 }
 
 func (s *JobStore) GetAllJobs() []Job {
 	ctx := context.Background()
-	keys, err := s.redisClient.Keys(ctx, "job:*").Result()
+	res, err := s.opensearchClient.Search(
+		s.opensearchClient.Search.WithContext(ctx),
+		s.opensearchClient.Search.WithIndex("jobs"),
+		s.opensearchClient.Search.WithSize(1000), // Adjust size as needed
+	)
 	if err != nil {
-		fmt.Printf("Error retrieving job keys: %v\n", err)
+		fmt.Printf("Error retrieving jobs: %v\n", err)
+		return nil
+	}
+	defer res.Body.Close()
+
+	var searchResult struct {
+		Hits struct {
+			Hits []struct {
+				Source Job `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&searchResult); err != nil {
+		fmt.Printf("Error decoding search results: %v\n", err)
 		return nil
 	}
 
-	jobs := make([]Job, 0, len(keys))
-	for _, key := range keys {
-		val, err := s.redisClient.Get(ctx, key).Result()
-		if err == nil {
-			var job Job
-			if json.Unmarshal([]byte(val), &job) == nil {
-				jobs = append(jobs, job)
-			}
-		}
+	jobs := make([]Job, 0, len(searchResult.Hits.Hits))
+	for _, hit := range searchResult.Hits.Hits {
+		jobs = append(jobs, hit.Source)
 	}
 	return jobs
 }
@@ -171,12 +213,43 @@ func (s *JobStore) SaveJob(job *Job) error {
 	ctx := context.Background()
 	jobData, err := json.Marshal(job)
 	if err != nil {
-		return fmt.Errorf("error marshaling the job to redis: %v", err)
+		return fmt.Errorf("error marshaling the job to OpenSearch: %v", err)
 	}
-
-	err = s.redisClient.Set(ctx, "job:"+job.ID, jobData, 0).Err()
+	req := opensearchapi.IndexRequest{
+		Index:      "jobs",
+		DocumentID: job.ID,
+		Body:       strings.NewReader(string(jobData)),
+	}
+	insertResponse, err := req.Do(ctx, s.opensearchClient)
 	if err != nil {
-		return fmt.Errorf("error saving job to redis: %v", err)
+		fmt.Println("failed to insert document ", err)
+	}
+	fmt.Println("Inserting a document")
+	fmt.Println(insertResponse)
+	defer insertResponse.Body.Close()
+
+	return nil
+}
+
+func (s *JobStore) UpdateJob(job *Job) error {
+	jobData, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("error marshaling the job to OpenSearch: %v", err)
+	}
+	req, err := http.NewRequest("POST", fmt.Sprintf("/jobs/_update/%s", job.ID), bytes.NewReader(jobData))
+	if err != nil {
+		return fmt.Errorf("failed to create update request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.opensearchClient.Transport.Perform(req)
+	if err != nil {
+		return fmt.Errorf("failed to perform update request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to update document, status: %s", resp.Status)
 	}
 	return nil
 }
