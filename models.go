@@ -52,6 +52,14 @@ type K8sEvent struct {
 			BatchJobName       string `json:"batch.kubernetes.io/job-name"`
 			ControllerUID      string `json:"controller-uid"`
 			JobName            string `json:"job-name"`
-		}
+		} `json:"labels"`
+		OwnerReferences []struct {
+			APIVersion         string `json:"apiVersion"`
+			Kind               string `json:"kind"`
+			Name               string `json:"name"`
+			UID                string `json:"uid"`
+			Controller         bool   `json:"controller"`
+			BlockOwnerDeletion bool   `json:"blockOwnerDeletion"`
+		} `json:"ownerReferences"`
 	} `json:"involvedObject"`
 }

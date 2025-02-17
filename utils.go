@@ -29,6 +29,7 @@ func NewJobStore() *JobStore {
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // For testing only. Use certificate for validation.
 				},
+				// Addresses: []string{"https://localhost:9200"},
 				Addresses: []string{"https://localhost:9200"},
 				Username:  "admin", // For testing only. Don't store credentials in code.
 				Password:  "Hiran@0685N",
@@ -40,6 +41,8 @@ func NewJobStore() *JobStore {
 	}
 	ctx := context.Background()
 	_, err = client.Indices.Exists(ctx, opensearchapi.IndicesExistsReq{Indices: []string{"jobs"}})
+	client.Indices.Exists(ctx, opensearchapi.IndicesExistsReq{Indices: []string{"kube-events"}})
+
 	if err != nil {
 		_, err = client.Indices.Create(ctx, opensearchapi.IndicesCreateReq{Index: "jobs"})
 		if err != nil {
@@ -80,12 +83,17 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 	defer s.mu.Unlock()
 
 	if event.InvolvedObject.Kind == "Job" {
+		// s.SendJob(event)
 
 		if event.Reason == "SuccessfulCreate" {
 
 			involvedObjectId := event.InvolvedObject.UID
 			fmt.Println("involvedObjectId", involvedObjectId)
 			podId := getPodId(event.Message)
+
+			jobName := event.InvolvedObject.OwnerReferences[0].Name
+
+			fmt.Println("jobName is", jobName)
 
 			job, exists := s.GetJob(involvedObjectId)
 
@@ -111,13 +119,13 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 
 				job.Activities = append(job.Activities, attempt)
 				// s.jobs[involvedObjectId] = job
-				s.SaveJob(job)
+				// s.SaveJob(job)
 
 			} else {
 				//another pod is created if the job has failed
 				changeLastActivity(*job, "Failed", event)
 				job.Activities = append(job.Activities, attempt)
-				s.UpdateJob(job)
+				// s.UpdateJob(job)
 
 			}
 
@@ -132,7 +140,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Success"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.UpdateJob(job)
+			// s.UpdateJob(job)
 		} else if event.Reason == "BackoffLimitExceeded" {
 			involvedObjectId := event.InvolvedObject.UID
 			job, exists := s.GetJob(involvedObjectId)
@@ -145,7 +153,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Failed"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.UpdateJob(job)
+			// s.UpdateJob(job)
 		}
 
 	}
@@ -221,6 +229,29 @@ func (s *JobStore) GetAllJobs() []Job {
 		jobs = append(jobs, hit.Source)
 	}
 	return jobs
+}
+
+func (s *JobStore) SendJob(event K8sEvent) error {
+	jobData, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("error marshaling the job to OpenSearch: %v", err)
+	}
+	ctx := context.Background()
+
+	indexResp, err := s.opensearchClient.Index(
+		ctx,
+		opensearchapi.IndexReq{
+			Index: "kube-events",
+			Body:  strings.NewReader(string(jobData)),
+		},
+	)
+	if err != nil {
+		fmt.Println("failed to update document ", err)
+		return nil
+	}
+
+	fmt.Printf("Document added to kube events : %s\n", indexResp.Result)
+	return nil
 }
 
 func (s *JobStore) SaveJob(job *Job) error {
