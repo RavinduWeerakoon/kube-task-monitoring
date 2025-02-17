@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
 )
 
 var jobStore *JobStore
@@ -72,22 +71,11 @@ func handleJobs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check if requesting specific job
-	path := strings.Trim(r.URL.Path, "/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) > 1 {
-		jobID := parts[1]
-		job, exists := jobStore.GetJob(jobID)
-		if !exists {
-			http.Error(w, "Job not found", http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(job)
-		return
-	}
+	// Get jobName from query parameters
+	jobName := r.URL.Query().Get("jobName")
 
 	// Return all jobs
-	jobs := jobStore.GetAllJobs()
+	jobs := jobStore.GetAllJobs(jobName)
+
 	json.NewEncoder(w).Encode(jobs)
 }

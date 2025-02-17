@@ -18,7 +18,7 @@ type JobStore struct {
 
 func NewJobStore() *JobStore {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
+		Addr: "localhost:6379",
 		// Addr:     "localhost:6379",
 		Password: "",
 		DB:       0,
@@ -59,12 +59,14 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 
 	if event.InvolvedObject.Kind == "Job" {
 
+		jobName := event.InvolvedObject.OwnerReferences[0].Name
+
 		if event.Reason == "SuccessfulCreate" {
 
 			involvedObjectId := event.InvolvedObject.UID
 			podId := getPodId(event.Message)
 
-			job, exists := s.GetJob(involvedObjectId)
+			job, exists := s.GetJob(involvedObjectId, jobName)
 
 			attempt := Attempt{
 				ID:         podId,
@@ -88,18 +90,18 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 
 				job.Activities = append(job.Activities, attempt)
 				// s.jobs[involvedObjectId] = job
-				s.SaveJob(job)
+				s.SaveJob(job, jobName)
 
 			} else {
 				changeLastActivity(*job, "Failed", event)
 				job.Activities = append(job.Activities, attempt)
-				s.SaveJob(job)
+				s.SaveJob(job, jobName)
 
 			}
 
 		} else if event.Reason == "Completed" {
 			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.GetJob(involvedObjectId)
+			job, exists := s.GetJob(involvedObjectId, jobName)
 			if !exists {
 				fmt.Println("Failed there's no job uid with that")
 
@@ -108,10 +110,10 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Success"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.SaveJob(job)
+			s.SaveJob(job, jobName)
 		} else if event.Reason == "BackoffLimitExceeded" {
 			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.GetJob(involvedObjectId)
+			job, exists := s.GetJob(involvedObjectId, jobName)
 			if !exists {
 				fmt.Println("Failed there's no job uid with that")
 
@@ -121,16 +123,16 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Failed"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.SaveJob(job)
+			s.SaveJob(job, jobName)
 		}
 
 	}
 }
 
 // Replace in-memory storage with Redis
-func (s *JobStore) GetJob(id string) (*Job, bool) {
+func (s *JobStore) GetJob(id string, name string) (*Job, bool) {
 	ctx := context.Background()
-	val, err := s.redisClient.Get(ctx, "job:"+id).Result()
+	val, err := s.redisClient.Get(ctx, "job:"+name+":"+id).Result()
 	if err == redis.Nil {
 		return nil, false
 	} else if err != nil {
@@ -146,9 +148,9 @@ func (s *JobStore) GetJob(id string) (*Job, bool) {
 	return &job, true
 }
 
-func (s *JobStore) GetAllJobs() []Job {
+func (s *JobStore) GetAllJobs(name string) []Job {
 	ctx := context.Background()
-	keys, err := s.redisClient.Keys(ctx, "job:*").Result()
+	keys, err := s.redisClient.Keys(ctx, "job:"+name+":*").Result()
 	if err != nil {
 		fmt.Printf("Error retrieving job keys: %v\n", err)
 		return nil
@@ -167,14 +169,14 @@ func (s *JobStore) GetAllJobs() []Job {
 	return jobs
 }
 
-func (s *JobStore) SaveJob(job *Job) error {
+func (s *JobStore) SaveJob(job *Job, name string) error {
 	ctx := context.Background()
 	jobData, err := json.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("error marshaling the job to redis: %v", err)
 	}
 
-	err = s.redisClient.Set(ctx, "job:"+job.ID, jobData, 0).Err()
+	err = s.redisClient.Set(ctx, "job:"+name+":"+job.ID, jobData, 0).Err()
 	if err != nil {
 		return fmt.Errorf("error saving job to redis: %v", err)
 	}
