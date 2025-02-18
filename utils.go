@@ -18,7 +18,7 @@ type JobStore struct {
 
 func NewJobStore() *JobStore {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "redis:6379",
 		// Addr:     "localhost:6379",
 		Password: "",
 		DB:       0,
