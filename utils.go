@@ -30,7 +30,7 @@ func NewJobStore() *JobStore {
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // For testing only. Use certificate for validation.
 				},
 				// Addresses: []string{"https://localhost:9200"},
-				Addresses: []string{"https://localhost:9200"},
+				Addresses: []string{"https://opensearch-service:9200"},
 				Username:  "admin", // For testing only. Don't store credentials in code.
 				Password:  "Hiran@0685N",
 			},
@@ -110,6 +110,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 
 				job := &Job{
 					ID:         involvedObjectId,
+					JobName:    jobName,
 					Name:       event.InvolvedObject.Name,
 					Namespace:  event.InvolvedObject.Namespace,
 					StartTime:  event.Metadata.CreationTimestamp,
@@ -119,13 +120,13 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 
 				job.Activities = append(job.Activities, attempt)
 				// s.jobs[involvedObjectId] = job
-				// s.SaveJob(job)
+				s.SaveJob(job)
 
 			} else {
 				//another pod is created if the job has failed
 				changeLastActivity(*job, "Failed", event)
 				job.Activities = append(job.Activities, attempt)
-				// s.UpdateJob(job)
+				s.UpdateJob(job)
 
 			}
 
@@ -140,7 +141,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Success"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			// s.UpdateJob(job)
+			s.UpdateJob(job)
 		} else if event.Reason == "BackoffLimitExceeded" {
 			involvedObjectId := event.InvolvedObject.UID
 			job, exists := s.GetJob(involvedObjectId)
@@ -153,7 +154,7 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 			job.Status = "Failed"
 			job.EndTime = event.Metadata.CreationTimestamp
 			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			// s.UpdateJob(job)
+			s.UpdateJob(job)
 		}
 
 	}
@@ -299,4 +300,52 @@ func (s *JobStore) UpdateJob(job *Job) error {
 
 	fmt.Printf("Document: %s\n", indexResp.Result)
 	return nil
+}
+
+// searchResp, err := client.Search(
+// 	ctx,
+// 	&opensearchapi.SearchReq{
+// 		Indices: []string{"kube-events"},
+// 		Params: opensearchapi.SearchParams{
+// 			Query: `metadata.name: "simplejob"`,
+// 			Sort:  []string{"metadata.creationTimestamp:asc"},
+// 		},
+// 	},
+// )
+
+func (s *JobStore) getJobs(name string) []Job {
+	ctx := context.Background()
+	searchResp, err := s.opensearchClient.Search(
+		ctx,
+		&opensearchapi.SearchReq{
+			Indices: []string{"jobs"},
+			Params: opensearchapi.SearchParams{
+				Query: fmt.Sprintf(`jobName:%s`, name),
+				Sort:  []string{"startTime:asc"},
+			},
+		},
+	)
+	if err != nil {
+		fmt.Printf("Error executing search query: %v\n", err)
+		return nil
+	}
+
+	var result struct {
+		Hits struct {
+			Hits []struct {
+				Source Job `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(searchResp.Inspect().Response.Body).Decode(&result); err != nil {
+		fmt.Printf("Error parsing search response: %v\n", err)
+		return nil
+	}
+
+	jobs := make([]Job, 0, len(result.Hits.Hits))
+	for _, hit := range result.Hits.Hits {
+		jobs = append(jobs, hit.Source)
+	}
+	return jobs
 }

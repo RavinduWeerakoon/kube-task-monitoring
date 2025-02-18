@@ -23,6 +23,7 @@ type Attempt struct {
 type Job struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
+	JobName    string    `json:"jobName"`
 	Namespace  string    `json:"namespace"`
 	StartTime  time.Time `json:"startTime"`
 	EndTime    time.Time `json:"endTime"`
