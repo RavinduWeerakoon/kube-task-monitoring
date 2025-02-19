@@ -83,79 +83,79 @@ func (s *JobStore) AddOrUpdateJob(event K8sEvent) {
 	defer s.mu.Unlock()
 
 	if event.InvolvedObject.Kind == "Job" {
-		// s.SendJob(event)
+		s.SendJob(event)
 
-		if event.Reason == "SuccessfulCreate" {
+		// if event.Reason == "SuccessfulCreate" {
 
-			involvedObjectId := event.InvolvedObject.UID
-			fmt.Println("involvedObjectId", involvedObjectId)
-			podId := getPodId(event.Message)
+		// 	involvedObjectId := event.InvolvedObject.UID
+		// 	fmt.Println("involvedObjectId", involvedObjectId)
+		// 	podId := getPodId(event.Message)
 
-			jobName := event.InvolvedObject.OwnerReferences[0].Name
+		// 	jobName := event.InvolvedObject.OwnerReferences[0].Name
 
-			fmt.Println("jobName is", jobName)
+		// 	fmt.Println("jobName is", jobName)
 
-			job, exists := s.GetJob(involvedObjectId)
+		// 	job, exists := s.GetJob(involvedObjectId)
 
-			attempt := Attempt{
-				ID:         podId,
-				StartTime:  event.Metadata.CreationTimestamp,
-				Duration:   0,
-				Status:     "Running",
-				Activities: []Activity{},
-				AttemptID:  podId,
-			}
+		// 	attempt := Attempt{
+		// 		ID:         podId,
+		// 		StartTime:  event.Metadata.CreationTimestamp,
+		// 		Duration:   0,
+		// 		Status:     "Running",
+		// 		Activities: []Activity{},
+		// 		AttemptID:  podId,
+		// 	}
 
-			if !exists {
+		// 	if !exists {
 
-				job := &Job{
-					ID:         involvedObjectId,
-					JobName:    jobName,
-					Name:       event.InvolvedObject.Name,
-					Namespace:  event.InvolvedObject.Namespace,
-					StartTime:  event.Metadata.CreationTimestamp,
-					Status:     "Running",
-					Activities: []Attempt{},
-				}
+		// 		job := &Job{
+		// 			ID:         involvedObjectId,
+		// 			JobName:    jobName,
+		// 			Name:       event.InvolvedObject.Name,
+		// 			Namespace:  event.InvolvedObject.Namespace,
+		// 			StartTime:  event.Metadata.CreationTimestamp,
+		// 			Status:     "Running",
+		// 			Activities: []Attempt{},
+		// 		}
 
-				job.Activities = append(job.Activities, attempt)
-				// s.jobs[involvedObjectId] = job
-				s.SaveJob(job)
+		// 		job.Activities = append(job.Activities, attempt)
+		// 		// s.jobs[involvedObjectId] = job
+		// 		s.SaveJob(job)
 
-			} else {
-				//another pod is created if the job has failed
-				changeLastActivity(*job, "Failed", event)
-				job.Activities = append(job.Activities, attempt)
-				s.UpdateJob(job)
+		// 	} else {
+		// 		//another pod is created if the job has failed
+		// 		changeLastActivity(*job, "Failed", event)
+		// 		job.Activities = append(job.Activities, attempt)
+		// 		s.UpdateJob(job)
 
-			}
+		// 	}
 
-		} else if event.Reason == "Completed" {
-			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.GetJob(involvedObjectId)
-			if !exists {
-				fmt.Println("Failed there's no job uid with that")
+		// } else if event.Reason == "Completed" {
+		// 	involvedObjectId := event.InvolvedObject.UID
+		// 	job, exists := s.GetJob(involvedObjectId)
+		// 	if !exists {
+		// 		fmt.Println("Failed there's no job uid with that")
 
-			}
-			changeLastActivity(*job, "Success", event)
-			job.Status = "Success"
-			job.EndTime = event.Metadata.CreationTimestamp
-			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.UpdateJob(job)
-		} else if event.Reason == "BackoffLimitExceeded" {
-			involvedObjectId := event.InvolvedObject.UID
-			job, exists := s.GetJob(involvedObjectId)
-			if !exists {
-				fmt.Println("Failed there's no job uid with that")
+		// 	}
+		// 	changeLastActivity(*job, "Success", event)
+		// 	job.Status = "Success"
+		// 	job.EndTime = event.Metadata.CreationTimestamp
+		// 	job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+		// 	s.UpdateJob(job)
+		// } else if event.Reason == "BackoffLimitExceeded" {
+		// 	involvedObjectId := event.InvolvedObject.UID
+		// 	job, exists := s.GetJob(involvedObjectId)
+		// 	if !exists {
+		// 		fmt.Println("Failed there's no job uid with that")
 
-			}
+		// 	}
 
-			changeLastActivity(*job, "Failed", event)
-			job.Status = "Failed"
-			job.EndTime = event.Metadata.CreationTimestamp
-			job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
-			s.UpdateJob(job)
-		}
+		// 	changeLastActivity(*job, "Failed", event)
+		// 	job.Status = "Failed"
+		// 	job.EndTime = event.Metadata.CreationTimestamp
+		// 	job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+		// 	s.UpdateJob(job)
+		// }
 
 	}
 }
@@ -348,4 +348,105 @@ func (s *JobStore) getJobs(name string) []Job {
 		jobs = append(jobs, hit.Source)
 	}
 	return jobs
+}
+
+func (s *JobStore) getJobsByEvents(events []K8sEvent) []Job {
+
+	jobMap := make(map[string]*Job)
+
+	for _, event := range events {
+		if event.InvolvedObject.Kind == "Job" {
+			involvedObjectId := event.InvolvedObject.UID
+			jobName := event.InvolvedObject.OwnerReferences[0].Name
+
+			job, exists := jobMap[involvedObjectId]
+
+			attempt := Attempt{
+				ID:         getPodId(event.Message),
+				StartTime:  event.Metadata.CreationTimestamp,
+				Duration:   0,
+				Status:     "Running",
+				Activities: []Activity{},
+				AttemptID:  getPodId(event.Message),
+			}
+
+			if !exists {
+				job = &Job{
+					ID:         involvedObjectId,
+					JobName:    jobName,
+					Name:       event.InvolvedObject.Name,
+					Namespace:  event.InvolvedObject.Namespace,
+					StartTime:  event.Metadata.CreationTimestamp,
+					Status:     "Running",
+					Activities: []Attempt{},
+				}
+				jobMap[involvedObjectId] = job
+			}
+
+			if event.Reason == "SuccessfulCreate" {
+				job.Activities = append(job.Activities, attempt)
+			} else if event.Reason == "Completed" {
+				changeLastActivity(*job, "Success", event)
+				job.Status = "Success"
+				job.EndTime = event.Metadata.CreationTimestamp
+				job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+			} else if event.Reason == "BackoffLimitExceeded" {
+				changeLastActivity(*job, "Failed", event)
+				job.Status = "Failed"
+				job.EndTime = event.Metadata.CreationTimestamp
+				job.Duration = event.Metadata.CreationTimestamp.Sub(job.StartTime).Seconds()
+			}
+		}
+	}
+
+	jobs := make([]Job, 0, len(jobMap))
+	for _, job := range jobMap {
+		jobs = append(jobs, *job)
+	}
+	return jobs
+
+}
+
+func (s *JobStore) getEvents(jobName string) []K8sEvent {
+	ctx := context.Background()
+	// Execute the search request.
+	searchResp, err := s.opensearchClient.Search(
+		ctx,
+		&opensearchapi.SearchReq{
+			Indices: []string{"kube-events"},
+			Params: opensearchapi.SearchParams{
+				Query: fmt.Sprintf(`involvedObject.ownerReferences.name:%s`, jobName),
+				Sort:  []string{"metadata.creationTimestamp:asc"},
+			},
+		},
+	)
+
+	if err != nil {
+		fmt.Printf("Error executing search query: %v\n", err)
+		return nil
+	}
+
+	var result struct {
+		Hits struct {
+			Hits []struct {
+				Source K8sEvent `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(searchResp.Inspect().Response.Body).Decode(&result); err != nil {
+		fmt.Printf("Error parsing search response: %v\n", err)
+		return nil
+	}
+
+	events := make([]K8sEvent, 0, len(result.Hits.Hits))
+	for _, hit := range result.Hits.Hits {
+		events = append(events, hit.Source)
+	}
+	return events
+}
+
+func (s *JobStore) GetJobs(jobName string) []Job {
+	events := s.getEvents(jobName)
+	return s.getJobsByEvents(events)
 }
