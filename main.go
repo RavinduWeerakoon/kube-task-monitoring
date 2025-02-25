@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 )
@@ -72,6 +73,7 @@ func handleJobs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	jobName := r.URL.Query().Get("jobName")
-	jobs := jobStore.getJobs(jobName)
+	fmt.Println(jobName)
+	jobs := jobStore.GetJobs(jobName)
 	json.NewEncoder(w).Encode(jobs)
 }
