@@ -29,10 +29,10 @@ func NewJobStore() *JobStore {
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // For testing only. Use certificate for validation.
 				},
-				// Addresses: []string{"https://localhost:9200"},
-				Addresses: []string{"https://opensearch-service:9200"},
-				Username:  "admin", // For testing only. Don't store credentials in code.
-				Password:  "Hiran@0685N",
+				Addresses: []string{"https://localhost:9200"},
+				// Addresses: []string{"https://opensearch-service:9200"},
+				Username: "admin", // For testing only. Don't store credentials in code.
+				Password: "Hiran@0685N",
 			},
 		},
 	)
